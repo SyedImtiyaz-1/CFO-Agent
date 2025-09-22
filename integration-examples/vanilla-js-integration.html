@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CFO Helper - Vanilla JS Integration</title>
+    <style>
+        .cfo-widget {
+            max-width: 600px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: Arial, sans-serif;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="file"], input[type="range"], button {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #2563eb;
+        }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="cfo-widget" id="cfoWidget">
+        <h2>CFO Helper Agent Integration</h2>
+        
+        <div class="form-group">
+            <label for="companyId">Company ID:</label>
+            <input type="text" id="companyId" value="demo-company" />
+        </div>
+
+        <div class="form-group">
+            <label for="fileUpload">Upload Financial Files:</label>
+            <input type="file" id="fileUpload" multiple accept=".pdf,.xlsx,.xls,.csv" />
+            <button onclick="uploadFiles()">Upload Files</button>
+        </div>
+
+        <div class="form-group">
+            <label for="spendingChange">Spending Change: <span id="spendingValue">0%</span></label>
+            <input type="range" id="spendingChange" min="-50" max="50" value="0" oninput="updateValue('spending')" />
+        </div>
+
+        <div class="form-group">
+            <label for="pricingChange">Pricing Change: <span id="pricingValue">0%</span></label>
+            <input type="range" id="pricingChange" min="-30" max="30" value="0" oninput="updateValue('pricing')" />
+        </div>
+
+        <div class="form-group">
+            <label for="hiringCount">New Hires: <span id="hiringValue">0</span></label>
+            <input type="range" id="hiringCount" min="0" max="20" value="0" oninput="updateValue('hiring')" />
+        </div>
+
+        <div class="form-group">
+            <label for="marketingBudget">Marketing Budget: ₹<span id="marketingValue">0</span></label>
+            <input type="range" id="marketingBudget" min="0" max="100000" step="5000" value="0" oninput="updateValue('marketing')" />
+        </div>
+
+        <button onclick="analyzeScenario()">Analyze Financial Scenario</button>
+        <button onclick="getRealTimeInsights()">Get Real-time Insights</button>
+
+        <div id="results" class="results" style="display: none;">
+            <h3>Analysis Results</h3>
+            <div id="resultContent"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+
+        // Update slider values
+        function updateValue(type) {
+            const element = document.getElementById(type + 'Change') || document.getElementById(type + 'Count') || document.getElementById(type + 'Budget');
+            const valueElement = document.getElementById(type + 'Value');
+            
+            if (type === 'marketing') {
+                valueElement.textContent = parseInt(element.value).toLocaleString();
+            } else {
+                valueElement.textContent = element.value + (type === 'hiring' ? '' : '%');
+            }
+        }
+
+        // Upload files function
+        async function uploadFiles() {
+            const fileInput = document.getElementById('fileUpload');
+            const companyId = document.getElementById('companyId').value;
+            const files = fileInput.files;
+
+            if (files.length === 0) {
+                alert('Please select files to upload');
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const fileData = await convertFilesToBase64(files);
+                
+                const response = await fetch(`${API_BASE}/api/pathway/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        company_id: companyId,
+                        files: fileData
+                    })
+                });
+
+                const result = await response.json();
+                showResults('Files uploaded successfully!', result);
+            } catch (error) {
+                showResults('Upload failed', { error: error.message });
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Analyze scenario function
+        async function analyzeScenario() {
+            const companyId = document.getElementById('companyId').value;
+            const scenarioData = {
+                company_id: companyId,
+                spending_change: parseInt(document.getElementById('spendingChange').value),
+                pricing_change: parseInt(document.getElementById('pricingChange').value),
+                hiring_count: parseInt(document.getElementById('hiringCount').value),
+                marketing_budget: parseInt(document.getElementById('marketingBudget').value)
+            };
+
+            setLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/pathway/scenario`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(scenarioData)
+                });
+
+                const result = await response.json();
+                showResults('Scenario Analysis Complete', result);
+            } catch (error) {
+                showResults('Analysis failed', { error: error.message });
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Get real-time insights
+        async function getRealTimeInsights() {
+            const companyId = document.getElementById('companyId').value;
+            setLoading(true);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/pathway/realtime/${companyId}`);
+                const result = await response.json();
+                showResults('Real-time Insights', result);
+            } catch (error) {
+                showResults('Failed to get insights', { error: error.message });
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Helper functions
+        async function convertFilesToBase64(files) {
+            const filePromises = Array.from(files).map(file => {
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                        resolve({
+                            filename: file.name,
+                            content: reader.result.split(',')[1],
+                            file_type: getFileType(file.name)
+                        });
+                    };
+                    reader.readAsDataURL(file);
+                });
+            });
+            
+            return Promise.all(filePromises);
+        }
+
+        function getFileType(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const typeMap = {
+                'xlsx': 'excel',
+                'xls': 'excel',
+                'csv': 'csv',
+                'pdf': 'pdf'
+            };
+            return typeMap[ext] || 'unknown';
+        }
+
+        function setLoading(loading) {
+            const widget = document.getElementById('cfoWidget');
+            if (loading) {
+                widget.classList.add('loading');
+            } else {
+                widget.classList.remove('loading');
+            }
+        }
+
+        function showResults(title, data) {
+            const resultsDiv = document.getElementById('results');
+            const contentDiv = document.getElementById('resultContent');
+            
+            contentDiv.innerHTML = `
+                <h4>${title}</h4>
+                <pre>${JSON.stringify(data, null, 2)}</pre>
+            `;
+            
+            resultsDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
